@@ -4,8 +4,16 @@
 #include "ICM42670P.h"
 #include "QMC5883LCompass.h"
 
+#include "MadgwickAHRS.h"
+
 ICM42670P IMU(Wire,0);
 QMC5883LCompass compass;
+
+#define DEG_TO_RAD 0.017453295199
+
+float aRes;
+float gRes;
+float mRes;
 
 volatile uint8_t irq_received = 0;
 
@@ -33,12 +41,15 @@ void setup()
     }
     // Accel ODR = 100 Hz and Full Scale Range = 16G
     IMU.startAccel(100, 16);
+    aRes = 16.0/32768;
     // Gyro ODR = 100 Hz and Full Scale Range = 2000 dps
     IMU.startGyro(100, 2000);
+    gRes = 2000.0/32768;
 
     compass.init();
     Serial.println("CALIBRATING. Keep moving your sensor...");
     compass.calibrate();
+    mRes = 0.73;
 
     Serial.println("DONE.");
 }
@@ -52,7 +63,6 @@ void loop()
         // Get last event
         IMU.getDataFromRegisters(&imu_event);
 
-        // Format data for Serial Plotter
         Serial.printf("ax: %7d ", imu_event.accel[0]);
         Serial.printf("ay: %7d ", imu_event.accel[1]);
         Serial.printf("az: %7d ", imu_event.accel[2]);
@@ -84,6 +94,12 @@ void loop()
         Serial.print(" A: ");
         Serial.print(a);
 
+        MadgwickAHRSupdate(
+            imu_event.gyro[0] * gRes * DEG_TO_RAD, imu_event.gyro[1] * gRes * DEG_TO_RAD, imu_event.gyro[2] * gRes * DEG_TO_RAD,
+            imu_event.accel[0] * aRes, imu_event.accel[1] * aRes, imu_event.accel[2] * aRes,
+            x * mRes, y * mRes, z * mRes
+        );
+        Serial.printf(" R: %8.2f P: %8.2f Y: %8.2f ", getRoll(), getPitch(), getYaw());
         Serial.println();
     }
 }
