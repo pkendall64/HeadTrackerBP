@@ -2,8 +2,10 @@
 #include <Wire.h>
 
 #include "ICM42670P.h"
+#include "QMC5883LCompass.h"
 
 ICM42670P IMU(Wire,0);
+QMC5883LCompass compass;
 
 volatile uint8_t irq_received = 0;
 
@@ -35,6 +37,10 @@ void setup()
     IMU.startGyro(100, 2000);
 
     compass.init();
+    Serial.println("CALIBRATING. Keep moving your sensor...");
+    compass.calibrate();
+
+    Serial.println("DONE.");
 }
 
 void loop()
@@ -55,6 +61,29 @@ void loop()
         Serial.printf("gy: %7d ", imu_event.gyro[1]);
         Serial.printf("gz: %7d ", imu_event.gyro[2]);
 
-        Serial.printf("T: %2.2fC\r\n", (float)imu_event.temperature / 128 + 25);
+        Serial.printf("T: %2.2fC ", (float)imu_event.temperature / 128 + 25);
+
+        int x, y, z, a;
+
+        // Read compass values
+        compass.read();
+
+        // Return XYZ readings
+        x = compass.getX();
+        y = compass.getY();
+        z = compass.getZ();
+
+        Serial.print("X: ");
+        Serial.print(x);
+        Serial.print(" Y: ");
+        Serial.print(y);
+        Serial.print(" Z: ");
+        Serial.print(z);
+
+        a = compass.getAzimuth();
+        Serial.print(" A: ");
+        Serial.print(a);
+
+        Serial.println();
     }
 }
