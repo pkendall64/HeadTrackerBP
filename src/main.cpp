@@ -146,13 +146,10 @@ void loop()
         rotate(a.array, orientation);
 
         FusionVector g;
-        g.axis.x =  imu_event.gyro[0] * gRes * DEG_TO_RAD;
-        g.axis.y =  imu_event.gyro[1] * gRes * DEG_TO_RAD;
-        g.axis.z =  imu_event.gyro[2] * gRes * DEG_TO_RAD;
+        g.axis.x =  imu_event.gyro[0] * gRes;
+        g.axis.y =  imu_event.gyro[1] * gRes;
+        g.axis.z =  imu_event.gyro[2] * gRes;
         rotate(g.array, orientation);
-        g.axis.x *= RAD_TO_DEG;
-        g.axis.y *= RAD_TO_DEG;
-        g.axis.z *= RAD_TO_DEG;
 
         FusionAhrsUpdateNoMagnetometer(&ahrs, g, a, 0.01f);
 
