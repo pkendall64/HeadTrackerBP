@@ -4,10 +4,11 @@
 #include "ICM42670P.h"
 #include "QMC5883LCompass.h"
 
-#include "MadgwickAHRS.h"
+#include "Fusion.h"
 
 ICM42670P IMU(Wire,0);
 QMC5883LCompass compass;
+FusionAhrs ahrs;
 
 float aRes;
 float gRes;
@@ -21,6 +22,16 @@ void webserver_update(float roll, float pitch, float yaw);
 
 IRAM_ATTR void irq_handler(void) {
   irq_received = 1;
+}
+
+// Normalizes any number to an arbitrary range
+// by assuming the range wraps around when going below min or above max
+float normalize(float value, float start, float end) {
+    float width = end - start;         //
+    float offsetValue = value - start; // value relative to 0
+
+    return (offsetValue - (floor(offsetValue / width) * width)) + start;
+    // + start to reset back to start of original range
 }
 
 // Rotate a point (pn) in space in Order X -> Y -> Z
@@ -87,6 +98,18 @@ void setup()
     IMU.startGyro(100, 2000);
     gRes = 2000.0/32768;
 
+    FusionAhrsInitialise(&ahrs);
+    // Set AHRS algorithm settings
+    const FusionAhrsSettings settings = {
+            .convention = FusionConventionNwu,
+            .gain = 0.5f,
+            .gyroscopeRange = 2000.0f, /* replace this with actual gyroscope range in degrees/s */
+            .accelerationRejection = 10.0f,
+            .magneticRejection = 10.0f,
+            .recoveryTriggerPeriod = 5 * 100, /* 5 seconds */
+    };
+    FusionAhrsSetSettings(&ahrs, &settings);
+
     webserver_setup();
 }
 
@@ -116,63 +139,70 @@ void loop()
         y = compass.getY();
         z = compass.getZ();
 
-        float a[3];
-        a[0] =  imu_event.accel[0] * aRes;
-        a[1] =  imu_event.accel[1] * aRes;
-        a[2] =  imu_event.accel[2] * aRes;
-        rotate(a, orientation);
+        FusionVector a;
+        a.axis.x =  imu_event.accel[0] * aRes;
+        a.axis.y =  imu_event.accel[1] * aRes;
+        a.axis.z =  imu_event.accel[2] * aRes;
+        rotate(a.array, orientation);
 
-        float g[3];
-        g[0] =  imu_event.gyro[0] * gRes * DEG_TO_RAD;
-        g[1] =  imu_event.gyro[1] * gRes * DEG_TO_RAD;
-        g[2] =  imu_event.gyro[2] * gRes * DEG_TO_RAD;
-        rotate(g, orientation);
+        FusionVector g;
+        g.axis.x =  imu_event.gyro[0] * gRes * DEG_TO_RAD;
+        g.axis.y =  imu_event.gyro[1] * gRes * DEG_TO_RAD;
+        g.axis.z =  imu_event.gyro[2] * gRes * DEG_TO_RAD;
+        rotate(g.array, orientation);
+        g.axis.x *= RAD_TO_DEG;
+        g.axis.y *= RAD_TO_DEG;
+        g.axis.z *= RAD_TO_DEG;
 
-        MadgwickAHRSupdateIMU(
-            g[0], g[1], g[2],
-            a[0], a[1], a[2]
-            // x * mRes, y * mRes, z * mRes
-        );
+        FusionAhrsUpdateNoMagnetometer(&ahrs, g, a, 0.01f);
 
-        if (counter++ == 10 && running)
+        FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+        euler.angle.roll -= rollHome;
+        euler.angle.pitch -= pitchHome;
+        euler.angle.yaw -= yawHome;
+
+        if (counter++ == 10)
         {
             counter = 0;
-#ifdef DEBUG_LOG
-            Serial.printf("ax: %7d ", imu_event.accel[0]);
-            Serial.printf("ay: %7d ", imu_event.accel[1]);
-            Serial.printf("az: %7d ", imu_event.accel[2]);
+            webserver_update(-(euler.angle.roll), (euler.angle.pitch), -(euler.angle.yaw));
+            if (running)
+            {
+    #ifdef DEBUG_LOG
+                Serial.printf("ax: %7d ", imu_event.accel[0]);
+                Serial.printf("ay: %7d ", imu_event.accel[1]);
+                Serial.printf("az: %7d ", imu_event.accel[2]);
 
-            Serial.printf("gx: %7d ", imu_event.gyro[0]);
-            Serial.printf("gy: %7d ", imu_event.gyro[1]);
-            Serial.printf("gz: %7d ", imu_event.gyro[2]);
+                Serial.printf("gx: %7d ", imu_event.gyro[0]);
+                Serial.printf("gy: %7d ", imu_event.gyro[1]);
+                Serial.printf("gz: %7d ", imu_event.gyro[2]);
 
-            Serial.printf("T: %2.2fC ", (float)imu_event.temperature / 128 + 25);
+                Serial.printf("T: %2.2fC ", (float)imu_event.temperature / 128 + 25);
 
-            Serial.print("X: ");
-            Serial.print(x);
-            Serial.print(" Y: ");
-            Serial.print(y);
-            Serial.print(" Z: ");
-            Serial.print(z);
+                Serial.print("X: ");
+                Serial.print(x);
+                Serial.print(" Y: ");
+                Serial.print(y);
+                Serial.print(" Z: ");
+                Serial.print(z);
 
-            int a = compass.getAzimuth();
-            Serial.print(" A: ");
-            Serial.print(a);
-#endif
-            Serial.printf("X: %8.2f Y: %8.2f Z: %8.2f", a[0], a[1], a[2]);
-            Serial.printf(" R: %8.2f P: %8.2f Y: %8.2f", (getRoll()-rollHome)*RAD_TO_DEG, (getPitch()-pitchHome)*RAD_TO_DEG, (getYaw()-yawHome)*RAD_TO_DEG);
-            Serial.println();
+                int a = compass.getAzimuth();
+                Serial.print(" A: ");
+                Serial.print(a);
+    #endif
+                Serial.printf("X: %8.2f Y: %8.2f Z: %8.2f", a.axis.x, a.axis.y, a.axis.z);
+                Serial.printf(" R: %8.2f P: %8.2f Y: %8.2f", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
+                Serial.println();
+            }
         }
-        webserver_update(-(getRoll()-rollHome)*RAD_TO_DEG, (getPitch()-pitchHome)*RAD_TO_DEG, -(getYaw()-yawHome)*RAD_TO_DEG);
         if (Serial.available()) {
             String s = Serial.readString();
             if (s == "z") {
-                rollHome = getRoll();
-                pitchHome = getPitch();
-                yawHome = getYaw();
-                rollHome = constrain(rollHome, 0.0, 360.0);
-                pitchHome = constrain(pitchHome, 0.0, 360.0);
-                yawHome = constrain(yawHome, 0.0, 360.0);
+                rollHome += euler.angle.roll;
+                pitchHome += euler.angle.pitch;
+                yawHome += euler.angle.yaw;
+                rollHome = normalize(rollHome, -180.0, 180.0);
+                pitchHome = normalize(pitchHome, -180.0, 180.0);
+                yawHome = normalize(yawHome, -180.0, 180.0);
                 return;
             }
             if (running) {
@@ -183,6 +213,7 @@ void loop()
                 pitchHome = 0;
                 yawHome = 0;
                 running = false;
+                FusionAhrsReset(&ahrs);
                 Serial.println("Start calibration, press f when device is flat");
             }
             if (s == "r") {
@@ -194,18 +225,19 @@ void loop()
                 if (s == "f") {
                     // remember the current angles
                     Serial.println("Now align the box so it is flat and press 'c'");
-                    roll = getRoll();
-                    pitch = getPitch();
-                    yaw = getYaw();
-                    Serial.printf("rX: %8.2f rY: %8.2f rZ: %8.2f", roll*RAD_TO_DEG, pitch*RAD_TO_DEG, yaw*RAD_TO_DEG);
+                    roll = euler.angle.roll;
+                    pitch = euler.angle.pitch;
+                    yaw = euler.angle.yaw;
+                    Serial.printf("rX: %8.2f rY: %8.2f rZ: %8.2f", roll, pitch, yaw);
                     Serial.println();
                 }
                 else if (s == "c") {
-                    orientation[0] = roll - getRoll();
-                    orientation[1] = pitch - getPitch();
-                    orientation[2] = yaw - getYaw();
-                    Serial.printf("oX: %8.2f oY: %8.2f oZ: %8.2f", orientation[0]*RAD_TO_DEG, orientation[1]*RAD_TO_DEG, orientation[2]*RAD_TO_DEG);
+                    orientation[0] = (roll - euler.angle.roll)*DEG_TO_RAD;
+                    orientation[1] = (pitch - euler.angle.pitch)*DEG_TO_RAD;
+                    orientation[2] = (yaw - euler.angle.yaw)*DEG_TO_RAD;
+                    Serial.printf("oX: %8.2f oY: %8.2f oZ: %8.2f", roll - euler.angle.roll, pitch - euler.angle.pitch, yaw - euler.angle.yaw);
                     Serial.println();
+                    FusionAhrsReset(&ahrs);
                     running = true;
                     counter = 0;
                 }
