@@ -74,7 +74,7 @@ void setup()
 	compass.setMode(0x01,0x08,0x10,0X00); // continuous, 100Hz, 8G, 512 over sample
 
     Serial.println("CALIBRATING. Keep moving your sensor...");
-    // compass.calibrate();
+    compass.calibrate();
     mRes = 0.73;
 
     Serial.println("DONE.");
@@ -132,13 +132,6 @@ void loop()
         inv_imu_sensor_event_t imu_event;
         IMU.getDataFromRegisters(&imu_event);
 
-        compass.read();
-
-        int x, y, z;
-        x = compass.getX();
-        y = compass.getY();
-        z = compass.getZ();
-
         FusionVector a;
         a.axis.x =  imu_event.accel[0] * aRes;
         a.axis.y =  imu_event.accel[1] * aRes;
@@ -151,7 +144,21 @@ void loop()
         g.axis.z =  imu_event.gyro[2] * gRes;
         rotate(g.array, orientation);
 
-        FusionAhrsUpdateNoMagnetometer(&ahrs, g, a, 0.01f);
+        compass.read();
+
+        FusionVector m;
+        m.axis.x = compass.getX();
+        m.axis.y = compass.getY();
+        m.axis.z = compass.getZ();
+        rotate(m.array, orientation);
+
+        // Calculate delta time (in seconds) to account for gyroscope sample clock error
+        const clock_t timestamp = micros();
+        static clock_t previousTimestamp;
+        const float deltaTime = (float) (timestamp - previousTimestamp) / (float) 1000000;
+        previousTimestamp = timestamp;
+
+        FusionAhrsUpdate(&ahrs, g, a, m, deltaTime);
 
         FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
         euler.angle.roll -= rollHome;
