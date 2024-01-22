@@ -29,13 +29,13 @@ const char INDEX_HTML[] PROGMEM = R"=====(
 <meta name = "viewport" content = "width = device-width, initial-scale = 1.0, maximum-scale = 1.0, user-scalable=0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.5.14/p5.min.js"></script>
 <script src="sketch.js"></script>
-<title>BNO055 9DOF Fusion IMU Configuration</title>
+<title>ExpressLRS Head-tracker Backpack Configuration</title>
 </head>
 <body onload="javascript:start();">
-<h3>BNO055 9DOF Fusion IMU Configuration</h3>
+<h3>ExpressLRS Head-tracker Backpack Configuration</h3>
 <button id="webSockStatus" type="button" onclick="window.location.reload();">Connect</button>
-<p>Device: %s
-<p>Sample Rate: %d
+<button type="button" onclick="websock.send('cc');">Calibrate Compass</button>
+<button type="button" onclick="websock.send('ci');">Calibrate IMU</button>
 </body>
 </html>
 )=====";

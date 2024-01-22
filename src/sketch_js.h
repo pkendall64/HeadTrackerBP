@@ -22,41 +22,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ****************************************************************************/
 const char SKETCH_JS[] PROGMEM = R"=====(
-function enableTouch(objname) {
-  console.log('enableTouch', objname);
-  var e = document.getElementById(objname);
-  if (e) {
-    e.addEventListener('touchstart', function(event) {
-        event.preventDefault();
-        console.log('touchstart', event);
-        buttondown(e);
-        }, false );
-    e.addEventListener('touchend',   function(event) {
-        console.log('touchend', event);
-        buttonup(e);
-        }, false );
-  }
-  else {
-    console.log(objname, ' not found');
-  }
-}
-
 var websock;
-var WebSockOpen=0;  //0=close,1=opening,2=open
 var Euler = {heading: 0.0, pitch: 0.0, roll: 0.0};
 
 function start() {
   websock = new WebSocket('ws://' + window.location.hostname + ':81/');
-  WebSockOpen=1;
   websock.onopen = function(evt) {
     console.log('websock open');
-    WebSockOpen=2;
     var e = document.getElementById('webSockStatus');
     e.style.backgroundColor = 'green';
   };
   websock.onclose = function(evt) {
     console.log('websock close');
-    WebSockOpen=0;
     var e = document.getElementById('webSockStatus');
     e.style.backgroundColor = 'red';
   };
@@ -65,47 +42,6 @@ function start() {
     //console.log('websock message ' + evt.data);
     Euler = JSON.parse(evt.data);
   };
-
-  var allButtons = [
-    'bForward',
-    'bBackward',
-    'bRight',
-    'bLeft',
-    'bLedon',
-    'bLed50',
-    'bLedoff'
-  ];
-  for (var i = 0; i < allButtons.length; i++) {
-    enableTouch(allButtons[i]);
-  }
-}
-function buttondown(e) {
-  switch (WebSockOpen) {
-    case 0:
-      window.location.reload();
-      WebSockOpen=1;
-      break;
-    case 1:
-    default:
-      break;
-    case 2:
-      websock.send(e.id + '=1');
-      break;
-  }
-}
-function buttonup(e) {
-  switch (WebSockOpen) {
-    case 0:
-      window.location.reload();
-      WebSockOpen=1;
-      break;
-    case 1:
-    default:
-      break;
-    case 2:
-      websock.send(e.id + '=0');
-      break;
-  }
 }
 
 function setup() {

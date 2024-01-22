@@ -21,21 +21,14 @@ WebServer Webserver(80);
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
-char DEVICE_NAME[32] = "bno055-a";
-
-/* Set the delay between fresh samples */
-#define BNO055_SAMPLERATE_DELAY_MS (10)
+char DEVICE_NAME[32] = "htbp";
 
 bool Connected = false;
 
 const char IMU_JSON[] PROGMEM = R"=====({"heading":%f,"pitch":%f,"roll":%f})=====";
 
 void handleRoot() {
-  char html[1024];
-
-  snprintf_P(html, sizeof(html), INDEX_HTML,
-      DEVICE_NAME, 1000/BNO055_SAMPLERATE_DELAY_MS);
-  Webserver.send(200, "text/html", html);
+  Webserver.send_P(200, "text/html", INDEX_HTML);
 }
 
 void handleSketch() {
@@ -74,7 +67,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       }
       break;
     case WStype_TEXT:
-      //Serial.printf("[%u] [%u ms] get Text: %s\r", num, millis()-lastMillis, payload);
+      Serial.printf("[%u] [%u ms] get Text: %s\r", num, millis()-lastMillis, payload);
       lastMillis = millis();
       break;
     case WStype_BIN:
@@ -90,11 +83,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
   }
 }
 
-/**************************************************************************/
-/*
-    Arduino setup function (automatically called at startup)
-*/
-/**************************************************************************/
 void webserver_setup()
 {
   WiFiManager wifiManager;
