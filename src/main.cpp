@@ -168,7 +168,7 @@ void loop()
         if (counter++ == 10)
         {
             counter = 0;
-            webserver_update(-(euler.angle.roll), (euler.angle.pitch), -(euler.angle.yaw));
+            webserver_update(euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
             if (running)
             {
     #ifdef DEBUG_LOG

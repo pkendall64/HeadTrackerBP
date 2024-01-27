@@ -119,9 +119,9 @@ function draw() {
   // draw main body in red
   fill(255, 0, 0);
 
-  rotateY(radians(-Euler.heading));
+  rotateY(radians(Euler.heading));
   rotateX(radians(Euler.pitch));
-  rotateZ(radians(-Euler.roll));
+  rotateZ(radians(Euler.roll));
 
   box(10, 10, 200);
 
